@@ -70,21 +70,30 @@ class Parser:
     
     def parse(self, tokens):
         global tree
+        if not tokens:  # Check if tokens list is empty
+            return "Error: Empty line"
+            
         self.output = str()
-        self.tokens = tokens
+        self.tokens = tokens.copy()  # Create a copy to avoid modifying the original
         self.inToken = self.tokens.pop(0)
-        if self.inToken[0] == "keyword" and self.tokens[0][0] == "identifier" and self.tokens[1][0] == "operator":
-            self.output += self.exp()
-        elif self.inToken[0] == "keyword" and self.inToken[1] == "if":
-            self.output += self.if_exp()
-        elif self.inToken[1] == "print":
-            self.output += self.print_call()
-        else:
-            return "Error! unable to parse line"
+        
+        try:
+            if len(self.tokens) >= 2 and self.inToken[0] == "keyword" and self.tokens[0][0] == "identifier" and self.tokens[1][0] == "operator":
+                self.output += self.exp()
+            elif self.inToken[0] == "keyword" and self.inToken[1] == "if":
+                self.output += self.if_exp()
+            elif self.inToken[0] == "keyword" and self.inToken[1] == "print":
+                self.output += self.print_call()
+            else:
+                return "Error! Unable to parse line"
 
-        if self.inToken[1] not in [";", ":"]:
-            self.output += "Error, statement not closed!\n"
-        return self.output
+            if self.inToken[1] not in [";", ":"]:
+                self.output += "Error, statement not closed!\n"
+            return self.output
+        except IndexError:
+            return "Error: Unexpected end of line"
+        except Exception as e:
+            return f"Error: {str(e)}"
 
     def exp(self):
         global tree
@@ -102,8 +111,7 @@ class Parser:
 
             self.accept_token()
         else:
-            print("expect a valid type in expression!\n")
-            return
+            return "Error: expect a valid type in expression!"
         
         typeT,token = self.inToken
         if typeT=="identifier":
@@ -116,8 +124,7 @@ class Parser:
 
             self.accept_token()
         else:
-            print("expect identifier as the second element of the expression!\n")
-            return
+            return "Error: expect identifier as the second element of the expression!"
 
         if(self.inToken[1]=="="):
             output += "child node (token):"+self.inToken[1]+"\n"
@@ -128,8 +135,7 @@ class Parser:
 
             self.accept_token()
         else:
-            print("expect = as the second element of the expression!")
-            return
+            return "Error: expect = as the second element of the expression!"
         
         tree.edge(str(self.currentNode), str(self.nextNode))
         self.currentNode = self.nextNode
@@ -149,10 +155,10 @@ class Parser:
             output += "\t"+self.inToken[0]+" has child node (token):"+self.inToken[1]+"\n"
             self.accept_token()
         else:
-            print("error, if_exp expects if")
+            return "Error: if_exp expects if"
 
         if self.inToken[1] != "(":
-            print("error, if_exp needs a (")
+            return "Error: if_exp needs a ("
         self.accept_token()
 
         tree.edge(str(self.currentNode), str(self.nextNode))
@@ -162,7 +168,7 @@ class Parser:
         output += self.comparison_exp()
             
         if self.inToken[1] != ")":
-            print("error, if_exp needs a )")
+            return "Error: if_exp needs a )"
         self.accept_token()
 
         return output
@@ -173,6 +179,7 @@ class Parser:
         output = str()
         output += "----parent node comparison_exp, finding children nodes:\n"
 
+        # Left side of comparison
         if self.inToken[0] == "identifier":
             output += "child node (internal): " + self.inToken[0] + "\n"
             output += "\t"+self.inToken[0]+" has child node (token):"+self.inToken[1]+"\n"
@@ -183,8 +190,9 @@ class Parser:
 
             self.accept_token()
         else:
-            print("error, comparison expects identifier")
+            return "Error: comparison expects identifier"
 
+        # Operator
         if self.inToken[1] in [">", "<"]:
             output += "child node (token):"+self.inToken[1]+"\n"
 
@@ -193,9 +201,21 @@ class Parser:
             self.nextNode += 1
 
             self.accept_token()
+        else:
+            return "Error: comparison expects > or < operator"
 
-            output += "child node (internal): comparison_exp\n"
-            output += self.comparison_exp().replace("\n", "\n\t")
+        # Right side of comparison
+        if self.inToken[0] in ["identifier", "int_literal", "float_literal"]:
+            output += "child node (internal): " + self.inToken[0] + "\n"
+            output += "\t"+self.inToken[0]+" has child node (token):"+self.inToken[1]+"\n"
+
+            tree.node(str(self.nextNode), self.inToken[1])
+            tree.edge(str(self.currentNode), str(self.nextNode))
+            self.nextNode += 1
+
+            self.accept_token()
+        else:
+            return "Error: comparison expects identifier or number"
 
         return output
 
@@ -204,12 +224,12 @@ class Parser:
         tree.node(str(self.currentNode), "Print Call")
         output = str()
         output += "----parent node print_call, finding children nodes:\n"
-        if self.inToken[1] != "print":
-            return "ERROR! Print call must start with print"
+        if self.inToken[0] != "keyword" or self.inToken[1] != "print":
+            return "Error: Print call must start with print"
         self.accept_token()
 
         if self.inToken[1] != "(":
-            return "ERROR! if_exp needs a ("
+            return "Error: print needs a ("
         self.accept_token()
 
         if self.inToken[0] == "string_literal":
@@ -222,10 +242,10 @@ class Parser:
 
             self.accept_token()
         else:
-            return "error, print expects string literal"
+            return "Error: print expects string literal"
 
         if self.inToken[1] != ")":
-            return "error, if_exp needs a )"
+            return "Error: print needs a )"
         self.accept_token()
 
         return output
@@ -236,7 +256,7 @@ class Parser:
         output = str()
         output += "----parent node math, finding children nodes:\n"
 
-        if self.inToken[0] in ["int_literal", "float_literal"]:
+        if self.inToken[0] in ["int_literal", "float_literal", "identifier"]:
             output += "child node (internal): " + self.inToken[0] + "\n"
             output += "\t"+self.inToken[0]+" has child node (token):"+self.inToken[1]+"\n"
 
@@ -246,7 +266,7 @@ class Parser:
 
             self.accept_token()
         else:
-            print("error, math expects float or int")
+            return "Error: math expects float, int, or identifier"
 
         if self.inToken[1] in ["+", "*"]:
             output += "child node (token):"+self.inToken[1]+"\n"
@@ -263,11 +283,10 @@ class Parser:
         return output
 
     def accept_token(self):
-        #print("     accept token from the list:"+self.inToken[1])
         try:
-            self.inToken=self.tokens.pop(0)
+            self.inToken = self.tokens.pop(0)
         except IndexError:
-            self.output += "Error! Unexpected end of line"
+            raise Exception("Unexpected end of input")
 
 class LexerGUI:
     def __init__(self, root):
